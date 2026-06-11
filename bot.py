@@ -22,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
-log = logging.getLogger("kerjaa-convert")
+log = logging.getLogger("bot-md-converter")
 
 # MarkItDown instance
 md = MarkItDown()
@@ -38,7 +38,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     log.info(f"Bot online: {bot.user} (ID: {bot.user.id})")
-    await bot.change_presence(activity=discord.Game(name="!help | MarkItDown"))
+    await bot.change_presence(activity=discord.Game(name="!help | MD Converter"))
 
 
 @bot.command(name="convert", aliases=["md", "tomd"])
@@ -57,6 +57,8 @@ async def convert_file(ctx):
         await ctx.send(f"File `{filename}` too large ({file_size // 1024 // 1024}MB). Max 50MB.")
         return
 
+    await ctx.send(f"Converting `{filename}`...")
+
     # Download to temp
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir) / filename
@@ -66,7 +68,7 @@ async def convert_file(ctx):
             await ctx.send(f"Download failed: {e}")
             return
 
-        # Convert (non-blocking - MarkItDown can be slow)
+        # Convert (non-blocking)
         try:
             markdown_text = await asyncio.to_thread(md.convert, str(tmp_path))
             markdown_text = markdown_text.text_content
@@ -79,9 +81,9 @@ async def convert_file(ctx):
         await ctx.send(f"`{filename}` produced empty output. Format may not be supported.")
         return
 
-    # Send as .md file attachment only - no preview in chat
+    # Send as .md file attachment
     md_filename = Path(filename).stem + ".md"
-    md_path = Path(tempfile.gettempdir()) / f"kerjaa_{md_filename}"
+    md_path = Path(tempfile.gettempdir()) / f"mdbot_{md_filename}"
     md_path.write_text(markdown_text, encoding="utf-8")
 
     try:
@@ -99,6 +101,8 @@ async def convert_url(ctx, url: str = None):
         await ctx.send("Provide a URL! Usage: `!url https://example.com`")
         return
 
+    await ctx.send(f"Converting `{url}`...")
+
     try:
         result = md.convert(url)
         markdown_text = result.text_content
@@ -110,9 +114,8 @@ async def convert_url(ctx, url: str = None):
         await ctx.send("URL produced empty output.")
         return
 
-    # Send as .md file only - no preview in chat
     md_filename = "webpage.md"
-    md_path = Path(tempfile.gettempdir()) / f"kerjaa_{md_filename}"
+    md_path = Path(tempfile.gettempdir()) / f"mdbot_{md_filename}"
     md_path.write_text(markdown_text, encoding="utf-8")
 
     try:
@@ -137,6 +140,8 @@ async def ocr_image(ctx):
         await ctx.send("Only image files supported for OCR.")
         return
 
+    await ctx.send(f"Running OCR on `{attachment.filename}`...")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir) / attachment.filename
         await attachment.save(tmp_path)
@@ -152,9 +157,8 @@ async def ocr_image(ctx):
         await ctx.send("No text detected in image.")
         return
 
-    # Send .md file only - no preview in chat
     md_filename = Path(attachment.filename).stem + "_ocr.md"
-    md_path = Path(tempfile.gettempdir()) / f"kerjaa_{md_filename}"
+    md_path = Path(tempfile.gettempdir()) / f"mdbot_{md_filename}"
     md_path.write_text(text, encoding="utf-8")
 
     try:
@@ -169,8 +173,8 @@ async def ocr_image(ctx):
 async def help_cmd(ctx):
     """Show available commands."""
     embed = discord.Embed(
-        title="KERJAA Convert Bot",
-        description="Convert any file to Markdown using MarkItDown",
+        title="MD Converter Bot",
+        description="Convert any file or URL to Markdown using MarkItDown",
         color=0x5865F2
     )
     embed.add_field(
@@ -185,13 +189,13 @@ async def help_cmd(ctx):
     )
     embed.add_field(
         name="!ocr",
-        value="OCR text from attached image\nUsage: `!ocr` + attach image",
+        value="Extract text from attached image\nUsage: `!ocr` + attach image",
         inline=False
     )
     embed.add_field(
         name="Supported formats",
         value="PDF, Word, Excel, PowerPoint, HTML, Images, Audio, "
-             "CSV, JSON, XML, ZIP, YouTube URLs, EPub",
+              "CSV, JSON, XML, ZIP, YouTube URLs, EPub",
         inline=False
     )
     await ctx.send(embed=embed)
@@ -210,5 +214,5 @@ async def on_command_error(ctx, error):
 
 
 # Run
-log.info("Starting KERJAA Convert Bot...")
+log.info("Starting MD Converter Bot...")
 bot.run(TOKEN)

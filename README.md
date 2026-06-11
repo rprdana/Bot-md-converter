@@ -1,21 +1,21 @@
 # Bot MD Converter
 
-Discord bot untuk convert file apapun ke format Markdown menggunakan [MarkItDown](https://github.com/microsoft/markitdown).
+Discord bot to convert any file to Markdown format using [MarkItDown](https://github.com/microsoft/markitdown).
 
 ## Features
 
-- Convert file attachment ke `.md` (PDF, Word, Excel, PowerPoint, HTML, Images, Audio, CSV, JSON, XML, ZIP, EPub)
-- Convert webpage/URL ke Markdown
-- OCR text dari gambar
-- Output langsung kirim file `.md`, tanpa spam di chat
+- Convert file attachments to `.md` (PDF, Word, Excel, PowerPoint, HTML, Images, Audio, CSV, JSON, XML, ZIP, EPub)
+- Convert webpages/URLs to Markdown
+- OCR text extraction from images
+- Clean output - sends `.md` file directly without chat spam
 
 ## Commands
 
-| Command | Deskripsi | Usage |
-|---------|-----------|-------|
-| `!convert` | Convert attached file ke .md | `!convert` + attach file |
-| `!url <link>` | Convert webpage ke .md | `!url https://example.com` |
-| `!ocr` | OCR text dari attached image | `!ocr` + attach image |
+| Command | Description | Usage |
+|---------|-------------|-------|
+| `!convert` | Convert attached file to .md | `!convert` + attach file |
+| `!url <link>` | Convert webpage to .md | `!url https://example.com` |
+| `!ocr` | Extract text from attached image | `!ocr` + attach image |
 | `!help` | Show command list | `!help` |
 
 ## Setup
@@ -28,17 +28,17 @@ pip install discord.py python-dotenv markitdown
 
 ### 2. Discord Bot Token
 
-1. Buat bot di [Discord Developer Portal](https://discord.com/developers/applications)
-2. Tab **Bot** → Reset Token → copy token
+1. Create bot at [Discord Developer Portal](https://discord.com/developers/applications)
+2. Go to **Bot** tab → Reset Token → copy token
 3. Enable **Message Content Intent**
-4. Invite bot ke server (scope: `bot`, permissions: Send Messages, Attach Files, Read Message History)
+4. Invite bot to server (scope: `bot`, permissions: Send Messages, Attach Files, Read Message History)
 
 ### 3. Environment Variables
 
-Buat file `.env`:
+Create `.env` file:
 
 ```env
-DISCORD_BOT_TOKEN=paste_token_di_sini
+DISCORD_BOT_TOKEN=your_token_here
 ```
 
 ### 4. Run Bot
@@ -80,8 +80,8 @@ Bot: [sends screenshot_ocr.md]
 ## Notes
 
 - Max file size: 50MB
-- MarkItDown conversion berjalan async (ga block bot)
-- Output cuma file attachment, ga ada preview di chat (biar ga berisik)
+- MarkItDown conversion runs asynchronously (non-blocking)
+- Output is sent as file attachment only, no preview in chat (clean output)
 
 ## Credits
 

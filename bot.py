@@ -9,6 +9,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from markitdown import MarkItDown
+import pytesseract
+from PIL import Image, ImageOps
 
 # Load env
 load_dotenv()
@@ -16,6 +18,13 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if not TOKEN:
     print("ERROR: DISCORD_BOT_TOKEN not found in .env")
     sys.exit(1)
+
+# Tesseract config
+TESSERACT_PATH = os.getenv(
+    "TESSERACT_PATH",
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
 # Logging
 logging.basicConfig(
@@ -126,9 +135,25 @@ async def convert_url(ctx, url: str = None):
     log.info(f"Converted URL: {url} ({len(markdown_text)} chars)")
 
 
+def _preprocess_for_ocr(image_path: str) -> Image.Image:
+    """Grayscale + threshold for better OCR accuracy."""
+    img = Image.open(image_path)
+    img = ImageOps.grayscale(img)
+    img = img.point(lambda x: 0 if x < 128 else 255, "1")
+    return img
+
+
 @bot.command(name="ocr")
-async def ocr_image(ctx):
-    """OCR an attached image. Usage: !ocr [attach image]"""
+async def ocr_image(ctx, *, args: str = ""):
+    """OCR via Tesseract. Usage: !ocr [lang=eng+ind] [attach image]"""
+    # Parse optional lang= argument
+    lang = "eng+ind"
+    if args:
+        parts = args.strip().split()
+        for p in parts:
+            if p.startswith("lang="):
+                lang = p.split("=", 1)[1]
+
     if not ctx.message.attachments:
         await ctx.send("Attach an image! Usage: `!ocr` + attach image")
         return
@@ -140,33 +165,73 @@ async def ocr_image(ctx):
         await ctx.send("Only image files supported for OCR.")
         return
 
-    await ctx.send(f"Running OCR on `{attachment.filename}`...")
+    # Size check
+    if attachment.size > 50 * 1024 * 1024:
+        await ctx.send(f"File too large ({attachment.size // 1024 // 1024}MB). Max 50MB.")
+        return
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir) / attachment.filename
-        await attachment.save(tmp_path)
+    # Tesseract installed check
+    if not Path(TESSERACT_PATH).exists():
+        await ctx.send(
+            "Tesseract not installed. Download: "
+            "https://github.com/UB-Mannheim/tesseract/wiki"
+        )
+        return
 
-        try:
-            result = md.convert(str(tmp_path))
-            text = result.text_content
-        except Exception as e:
-            await ctx.send(f"OCR failed: {e}")
-            return
+    await ctx.send(f"Running OCR on `{attachment.filename}` (lang=`{lang}`)...")
+
+    text = ""
+    img_w, img_h = "?", "?"
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir) / attachment.filename
+            await attachment.save(tmp_path)
+
+            # Read dimensions before temp cleanup
+            with Image.open(tmp_path) as img:
+                img_w, img_h = img.size
+
+            # Preprocess + OCR (non-blocking with timeout)
+            def run_ocr():
+                preprocessed = _preprocess_for_ocr(str(tmp_path))
+                return pytesseract.image_to_string(preprocessed, lang=lang)
+
+            try:
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(run_ocr), timeout=30
+                )
+            except asyncio.TimeoutError:
+                await ctx.send("OCR timed out after 30s — image may be too large or complex.")
+                return
+
+    except Exception as e:
+        await ctx.send(f"OCR error: {e}")
+        log.error(f"OCR error for {attachment.filename}: {e}")
+        return
 
     if not text or not text.strip():
-        await ctx.send("No text detected in image.")
+        await ctx.send("OCR returned no text — image may be blank, unreadable, or unsupported.")
         return
+
+    # Build Markdown output
+
+    md_content = (
+        f"# OCR: {attachment.filename}\n"
+        f"**Language:** {lang}\n"
+        f"**Size:** {img_w}x{img_h}px\n"
+        f"---\n"
+        f"{text.strip()}\n"
+    )
 
     md_filename = Path(attachment.filename).stem + "_ocr.md"
     md_path = Path(tempfile.gettempdir()) / f"mdbot_{md_filename}"
-    md_path.write_text(text, encoding="utf-8")
-
     try:
+        md_path.write_text(md_content, encoding="utf-8")
         await ctx.send(file=discord.File(str(md_path), filename=md_filename))
     finally:
         md_path.unlink(missing_ok=True)
 
-    log.info(f"OCR: {attachment.filename} ({len(text)} chars)")
+    log.info(f"OCR: {attachment.filename} lang={lang} ({len(text)} chars)")
 
 
 @bot.command(name="help")
@@ -189,7 +254,9 @@ async def help_cmd(ctx):
     )
     embed.add_field(
         name="!ocr",
-        value="Extract text from attached image\nUsage: `!ocr` + attach image",
+        value="Extract text from image via Tesseract OCR\n"
+              "Usage: `!ocr` + attach image\n"
+              "Language: `!ocr lang=ind` or `!ocr lang=eng+ind`",
         inline=False
     )
     embed.add_field(
